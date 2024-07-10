@@ -62,7 +62,7 @@ export default defineComponent({
 /* Your styles here */
 </style> -->
 
-<template>
+<!-- <template>
   <v-navigation-drawer v-if="$devMode && !isMobile && !isAppRoute" v-model="localDrawer" app class="sidebar">
     <v-treeview
       v-model="tree"
@@ -199,6 +199,122 @@ export default defineComponent({
       loadSubFolder, 
       onFolderToggle, 
       handleFileChange 
+    };
+  }
+});
+</script> -->
+
+<template>
+  <v-navigation-drawer v-if="$devMode && !isMobile && !isAppRoute" v-model="localDrawer" app class="sidebar">
+    <v-btn @click="goBack" :disabled="pathStack.length === 0">Back</v-btn>
+    <v-list>
+      <v-list-item
+        v-for="item in localItems"
+        :key="item.id"
+        @click="handleItemClick(item)"
+      >
+        <v-list-item-icon>
+          <v-icon v-if="item.file === 'folder'">{{ 'mdi-folder' }}</v-icon>
+          <v-icon v-else>{{ fileIcon(item.file) }}</v-icon>
+        </v-list-item-icon>
+        <v-list-item-content>
+          <v-list-item-title>{{ item.title }}</v-list-item-title>
+        </v-list-item-content>
+      </v-list-item>
+    </v-list>
+    <v-divider></v-divider>
+    <v-file-input
+      label="Upload File"
+      prepend-icon="mdi-upload"
+      filled
+      @change="handleFileChange"
+    ></v-file-input>
+  </v-navigation-drawer>
+</template>
+
+<script>
+import { defineComponent, ref, onMounted, watch } from 'vue';
+import axios from 'axios';
+
+export default defineComponent({
+  name: 'SidebarComponent',
+  props: {
+    drawer: Boolean,
+    items: Array,
+    fileIcon: Function,
+    isMobile: Boolean,
+    isAppRoute: Boolean,
+  },
+  emits: ['update:drawer', 'update:items', 'handleFileChange'],
+  setup(props, { emit }) {
+    const localDrawer = ref(props.drawer);
+    const localItems = ref(props.items || []);
+    const currentPath = ref('.');
+    const pathStack = ref([]);
+
+    watch(() => props.drawer, (newValue) => {
+      localDrawer.value = newValue;
+    });
+
+    watch(localDrawer, (newValue) => {
+      emit('update:drawer', newValue);
+    });
+
+    const loadFiles = async (path) => {
+      try {
+        const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}api/get_children`, { params: { path } });
+        localItems.value = response.data.files;
+        emit('update:items', response.data.files);
+      } catch (error) {
+        console.error('Failed to load files:', error);
+      }
+    };
+
+    onMounted(() => {
+      loadFiles(currentPath.value);
+    });
+
+    const handleItemClick = (item) => {
+      if (item.file === 'folder') {
+        pathStack.value.push(currentPath.value);
+        currentPath.value = item.id;
+        loadFiles(currentPath.value);
+      }
+    };
+
+    const goBack = () => {
+      if (pathStack.value.length > 0) {
+        currentPath.value = pathStack.value.pop();
+        loadFiles(currentPath.value);
+      }
+    };
+
+    const handleFileChange = async (file) => {
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        try {
+          const response = await axios.post(`${import.meta.env.VITE_BACKEND_URL}api/upload_file`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          console.log("File processed", response.data);
+          // Reload the file list after successful upload
+          loadFiles(currentPath.value);
+        } catch (error) {
+          console.error("Error processing file:", error.response);
+        }
+      } else {
+        console.error("No file selected");
+      }
+    };
+
+    return { 
+      localDrawer, 
+      localItems, 
+      handleItemClick, 
+      handleFileChange, 
+      goBack, 
+      pathStack 
     };
   }
 });
